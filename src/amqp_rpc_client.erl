@@ -109,6 +109,7 @@ publish(Payload, From,
     EncodedCorrelationId = base64:encode(<<CorrelationId:64>>),
     Props = #'P_basic'{correlation_id = EncodedCorrelationId,
                        content_type = <<"application/octet-stream">>,
+                       delivery_mode = 2,
                        reply_to = Q},
     Publish = #'basic.publish'{exchange = X,
                                routing_key = RoutingKey,
@@ -172,6 +173,7 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 
 %% @private
+% 
 handle_info({#'basic.return'{}, Content}, State = #state{continuations = Conts, channel = _Channel}) ->
     #amqp_msg{props = #'P_basic'{correlation_id = Id}, payload = Payload} = Content,
     From = dict:fetch(Id, Conts),
