@@ -27,6 +27,7 @@
 
 -export([start/2, start_link/2, stop/1]).
 -export([call/2]).
+-export([cast/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3,
          handle_cast/2, handle_info/2]).
 
@@ -81,6 +82,9 @@ stop(Pid) ->
 call(RpcClient, Payload) ->
     gen_server:call(RpcClient, {call, Payload}, infinity).
 
+cast(RpcClient, Payload) ->
+  gen_server:cast(RpcClient, {call, Payload}, infinity).
+
 %%--------------------------------------------------------------------------
 %% Plumbing
 %%--------------------------------------------------------------------------
@@ -119,6 +123,19 @@ publish(Payload, From,
     State#state{correlation_id = CorrelationId + 1,
                 continuations = dict:store(EncodedCorrelationId, From, Continuations)}.
 
+publish_async(Payload, State = #state{channel = Channel,
+                       exchange = X,
+                       routing_key = RoutingKey}) ->
+  Props = #'P_basic'{ content_type = <<"application/octet-stream">>,
+                       delivery_mode = 2},
+  Publish = #'basic.publish'{exchange = X,
+                             routing_key = RoutingKey,
+                             mandatory = true},
+  amqp_channel:call(Channel, Publish, #amqp_msg{props = Props,
+                                                payload = Payload}),
+  State.
+
+
 %%--------------------------------------------------------------------------
 %% gen_server callbacks
 %%--------------------------------------------------------------------------
@@ -153,6 +170,9 @@ handle_call({call, Payload}, From, State) ->
     {noreply, NewState}.
 
 %% @private
+handle_cast({call, Payload}, State) ->
+    NewState = publish_async(Payload, State),
+    {noreply, NewState};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -177,7 +197,7 @@ handle_info(#'basic.cancel_ok'{}, State) ->
 handle_info({#'basic.return'{}, Content}, State = #state{continuations = Conts, channel = _Channel}) ->
     #amqp_msg{props = #'P_basic'{correlation_id = Id}, payload = Payload} = Content,
     From = dict:fetch(Id, Conts),
-    gen_server:reply(From, Payload),
+    gen_server:reply(From, {error, Payload}),
     {noreply, State};
 handle_info({#'basic.deliver'{delivery_tag = DeliveryTag},
              #amqp_msg{props = #'P_basic'{correlation_id = Id},
