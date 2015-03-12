@@ -80,7 +80,7 @@ stop(Pid) ->
 %% @doc Invokes an RPC. Note the caller of this function is responsible for
 %% encoding the request and decoding the response.
 call(RpcClient, Payload) ->
-    gen_server:call(RpcClient, {call, Payload}, infinity).
+  gen_server:call(RpcClient, {call, Payload}, infinity).
 
 cast(RpcClient, Payload) ->
   gen_server:cast(RpcClient, {call, Payload}, infinity).
